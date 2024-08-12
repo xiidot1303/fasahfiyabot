@@ -1,4 +1,5 @@
 import asyncio
+from asgiref.sync import async_to_sync, sync_to_async
 from telegram import Update, Bot, Message
 from telegram.ext import (
     ApplicationBuilder, 
@@ -61,6 +62,8 @@ class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
         if isinstance(update, WebhookUpdate):
             return cls(application=application, user_id=update.user_id)
         return super().from_update(update, application)
+
+context_types = ContextTypes(context=CustomContext)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,28 +129,11 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-async def main() -> None:
+async def main(application: Application) -> None:
     """Set up PTB application and a web application for handling the incoming requests."""
-    context_types = ContextTypes(context=CustomContext)
     # Here we set updater to None because we want our custom webhook server to handle the updates
     # and hence we don't need an Updater instance
-    persistence = PicklePersistence(filepath='persistence')
-    application = (
-        Application.builder().token(BOT_TOKEN).persistence(persistence).context_types(context_types).build()
-    )
-
-    # register handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.REPLY, forward_to_admin))
-    application.add_handler(MessageHandler(filters.TEXT & filters.REPLY, reply_from_admin))
-    application.add_error_handler(error_handler)
-
-    if ENVIRONMENT == 'production':
-        await application.bot.set_webhook(url=f"{URL}/telegram", allowed_updates=Update.ALL_TYPES)
-    elif ENVIRONMENT == 'development':
-        application.run_polling()
-
-    # Pass webhook settings to telegram
+    await application.bot.set_webhook(url=f"{URL}/telegram", allowed_updates=Update.ALL_TYPES)
 
     # Set up webserver
     async def telegram(request: Request) -> Response:
@@ -179,4 +165,21 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    persistence = PicklePersistence(filepath='persistence')
+    application = (
+        Application.builder().token(BOT_TOKEN).persistence(persistence).context_types(context_types).build()
+    )
+
+    # register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.REPLY, forward_to_admin))
+    application.add_handler(MessageHandler(filters.TEXT & filters.REPLY, reply_from_admin))
+    application.add_error_handler(error_handler)
+
+    if ENVIRONMENT == 'production':
+        asyncio.run(main(application))
+    elif ENVIRONMENT == 'development':
+        # async with application:
+        print('Bot polling ...')
+        application.run_polling()
+        
