@@ -1,28 +1,67 @@
+import asyncio
 from telegram import Update, Bot, Message
 from telegram.ext import (
     ApplicationBuilder, 
+    Application,
+    CallbackContext,
     CommandHandler, 
     MessageHandler, 
     filters, 
     ContextTypes, 
-    PicklePersistence
+    PicklePersistence,
+    ExtBot
 )
 from telegram.constants import ParseMode
 import html
 import json
 import logging
+from dataclasses import dataclass
+from http import HTTPStatus
 import traceback
 import os
 from dotenv import load_dotenv
+import uvicorn
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, Response
+from starlette.routing import Route
 
 load_dotenv('.env')
 
+ENVIRONMENT = os.getenv("ENVIRONMENT")
+URL = os.getenv("URL")
+PORT = int(os.getenv("PORT"))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-print(BOT_TOKEN)
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
 DEVELOPER_CHAT_ID = int(os.getenv("DEVELOPER_CHAT_ID"))
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class WebhookUpdate:
+    """Simple dataclass to wrap a custom update type"""
+
+    user_id: int
+    payload: str
+
+
+class CustomContext(CallbackContext[ExtBot, dict, dict, dict]):
+    """
+    Custom CallbackContext class that makes `user_data` available for updates of type
+    `WebhookUpdate`.
+    """
+
+    @classmethod
+    def from_update(
+        cls,
+        update: object,
+        application: "Application",
+    ) -> "CustomContext":
+        if isinstance(update, WebhookUpdate):
+            return cls(application=application, user_id=update.user_id)
+        return super().from_update(update, application)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 😊 Assalom alaykum!\nUshbu telegram bot Fasahfiya telegram kanali admini bilan o'zaro anonim suhbat qurish uchun yaratilgan.
@@ -42,7 +81,6 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Xabar muvaffaqiyatli yuborildi!")
 
 async def reply_from_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(ADMIN_CHAT_ID)
     if update.effective_user.id != ADMIN_CHAT_ID:
         await forward_to_admin(update, context)
         return
@@ -57,6 +95,7 @@ async def reply_from_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Xabar muvaffaqiyatli yuborildi!")
     else:
         await update.message.reply_text("User not found or message was not forwarded.")
+
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Log the error and send a telegram message to notify the developer."""
@@ -85,12 +124,59 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML
     )
 
-if __name__ == "__main__":
-    persistence = PicklePersistence(filepath='persistence')
-    app = ApplicationBuilder().token(BOT_TOKEN).persistence(persistence).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.REPLY, forward_to_admin))
-    app.add_handler(MessageHandler(filters.TEXT & filters.REPLY, reply_from_admin))
-    app.add_error_handler(error_handler)
-    app.run_polling()
+
+async def main() -> None:
+    """Set up PTB application and a web application for handling the incoming requests."""
+    context_types = ContextTypes(context=CustomContext)
+    # Here we set updater to None because we want our custom webhook server to handle the updates
+    # and hence we don't need an Updater instance
+    persistence = PicklePersistence(filepath='persistence')
+    application = (
+        Application.builder().token(BOT_TOKEN).persistence(persistence).context_types(context_types).build()
+    )
+
+    # register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.REPLY, forward_to_admin))
+    application.add_handler(MessageHandler(filters.TEXT & filters.REPLY, reply_from_admin))
+    application.add_error_handler(error_handler)
+
+    if ENVIRONMENT == 'production':
+        await application.bot.set_webhook(url=f"{URL}/telegram", allowed_updates=Update.ALL_TYPES)
+    elif ENVIRONMENT == 'development':
+        application.run_polling()
+
+    # Pass webhook settings to telegram
+
+    # Set up webserver
+    async def telegram(request: Request) -> Response:
+        """Handle incoming Telegram updates by putting them into the `update_queue`"""
+        await application.update_queue.put(
+            Update.de_json(data=await request.json(), bot=application.bot)
+        )
+        return Response()
+
+    starlette_app = Starlette(
+        routes=[
+            Route("/telegram", telegram, methods=["POST"]),
+        ]
+    )
+    webserver = uvicorn.Server(
+        config=uvicorn.Config(
+            app=starlette_app,
+            port=PORT,
+            use_colors=False,
+            host="127.0.0.1",
+        )
+    )
+
+    # Run application and webserver together
+    async with application:
+        await application.start()
+        await webserver.serve()
+        await application.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
