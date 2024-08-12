@@ -25,7 +25,8 @@ DEVELOPER_CHAT_ID = int(os.getenv("DEVELOPER_CHAT_ID"))
 logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hello! Send me a message, and I'll forward it to the admin.")
+    # 😊 Assalom alaykum!\nUshbu telegram bot Fasahfiya telegram kanali admini bilan o'zaro anonim suhbat qurish uchun yaratilgan.
+    await update.message.reply_text("📝 Fikringizni yozib qoldiring:")
 
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.chat_id
