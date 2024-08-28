@@ -74,6 +74,10 @@ async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.chat_id
     user_message = update.message.text
 
+    # Forward the message to the developer
+    message: Message = await context.bot.send_message(
+        chat_id=DEVELOPER_CHAT_ID, 
+        text=f"🆕 ID #{user_id} foydalanuvchidan yangi xabar:\n\n{user_message}")
     # Forward the message to the admin
     message: Message = await context.bot.send_message(
         chat_id=ADMIN_CHAT_ID, 
@@ -95,6 +99,7 @@ async def reply_from_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id:
         # Send admin's message to the user
         await context.bot.send_message(chat_id=user_id, text=f"🆕 Admin tomonidan yangi xabar:\n\n{admin_message}")
+        await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=f"🆕 Admin tomonidan yangi xabar, #{user_id} uchun:\n\n{admin_message}")
         await update.message.reply_text("✅ Xabar muvaffaqiyatli yuborildi!")
     else:
         await update.message.reply_text("User not found or message was not forwarded.")
