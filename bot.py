@@ -35,6 +35,8 @@ PORT = int(os.getenv("PORT"))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
 DEVELOPER_CHAT_ID = int(os.getenv("DEVELOPER_CHAT_ID"))
+BLACK_LIST = os.getenv("BLACK_LIST").split(',')
+print(BLACK_LIST)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def forward_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.chat_id
+    if user_id in BLACK_LIST:
+        return 
     user_message = update.message.text
 
     # Forward the message to the developer
