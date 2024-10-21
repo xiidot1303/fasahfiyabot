@@ -35,8 +35,7 @@ PORT = int(os.getenv("PORT"))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
 DEVELOPER_CHAT_ID = int(os.getenv("DEVELOPER_CHAT_ID"))
-BLACK_LIST = os.getenv("BLACK_LIST").split(',')
-print(BLACK_LIST)
+BLACK_LIST = list(map(int, os.getenv("BLACK_LIST").split(',')))
 
 logger = logging.getLogger(__name__)
 
